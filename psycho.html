@@ -93,7 +93,7 @@
             text-align: center;
             margin-top: 1rem;
             font-size: 0.9rem;
-            color: #4a5568;
+            color: #dc2626; /* Red color for error messages */
         }
         .input-field-container {
             padding: 1.5rem;
@@ -133,8 +133,8 @@
 
         <form id="test-form">
             <div class="input-field-container">
-                <label for="user-name">Your Name (Optional):</label>
-                <input type="text" id="user-name" name="user-name" placeholder="Enter your name">
+                <label for="user-name">Your Name <span style="color: red;">*</span>:</label>
+                <input type="text" id="user-name" name="user-name" placeholder="Enter your name" required>
             </div>
 
             <div class="section-container bg-white shadow-sm rounded-lg overflow-hidden">
@@ -155,7 +155,7 @@
         const downloadBtn = document.getElementById('download-btn');
         const shareBtn = document.getElementById('share-btn');
         const shareStatus = document.getElementById('share-status');
-        const userNameInput = document.getElementById('user-name'); // Get reference to new input
+        const userNameInput = document.getElementById('user-name');
 
         const numSections = 8;
         const numQuestionsPerSection = 25;
@@ -213,22 +213,25 @@
 
         // --- Function to generate CSV content ---
         function generateCsvContent() {
-            const formData = new FormData(testForm);
+            const userName = userNameInput.value.trim();
+            if (!userName) {
+                shareStatus.textContent = 'Please enter your name before downloading/sharing.';
+                userNameInput.focus(); // Focus on the input field
+                return null; // Indicate failure to generate CSV
+            }
+
             let csvContent = ""; // Start with empty string, name will be first
 
-            // Get the user's name
-            let userName = userNameInput.value.trim();
-            if (userName) {
-                // Ensure name is properly CSV-escaped if it contains commas or quotes
-                const escapedUserName = `"${userName.replace(/"/g, '""')}"`;
-                csvContent += `${escapedUserName}\n`; // Add name as the very first line
-            }
+            // Ensure name is properly CSV-escaped if it contains commas or quotes
+            const escapedUserName = `"${userName.replace(/"/g, '""')}"`;
+            csvContent += `${escapedUserName}\n`; // Add name as the very first line
 
             csvContent += "section,question,answer\n"; // CSV Header
 
+            const formData = new FormData(testForm);
             // Iterate over form entries to build CSV rows
             for (let [key, value] of formData.entries()) {
-                // Skip the user-name field here, as it's handled above
+                // Skip the user-name field here, as it's already handled
                 if (key === 'user-name') {
                     continue;
                 }
@@ -247,50 +250,66 @@
 
         // --- Download Logic (reusing generateCsvContent) ---
         downloadBtn.addEventListener('click', function() {
+            shareStatus.textContent = ''; // Clear previous status
             const csvContent = generateCsvContent();
+            if (!csvContent) { // If generateCsvContent returned null due to missing name
+                return;
+            }
+
             const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
             
             const link = document.createElement("a");
             const url = URL.createObjectURL(blob);
             link.setAttribute("href", url);
-            link.setAttribute("download", "psychometric_answers.csv");
+            link.setAttribute("download", `psychometric_answers_${userNameInput.value.trim().replace(/[^a-z0-9_.-]/gi, '_')}.csv`); // Dynamic filename
             link.style.visibility = 'hidden';
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
             URL.revokeObjectURL(url); // Clean up the URL
-            shareStatus.textContent = 'Answers downloaded as psychometric_answers.csv';
+            shareStatus.textContent = `Answers downloaded as psychometric_answers_${userNameInput.value.trim().replace(/[^a-z0-9_.-]/gi, '_')}.csv`;
+            shareStatus.style.color = '#4a5568'; // Default text color
         });
 
         // --- Share Logic (new) ---
         shareBtn.addEventListener('click', async () => {
             shareStatus.textContent = 'Preparing to share...';
+            shareStatus.style.color = '#4a5568'; // Default text color
 
             const csvContent = generateCsvContent();
+            if (!csvContent) { // If generateCsvContent returned null due to missing name
+                return;
+            }
+
             const blob = new Blob([csvContent], { type: 'text/csv' }); // type: 'text/csv' is sufficient for share API
-            const csvFile = new File([blob], 'psychometric_answers.csv', { type: 'text/csv' });
+            // Dynamic filename for share API as well
+            const fileName = `psychometric_answers_${userNameInput.value.trim().replace(/[^a-z0-9_.-]/gi, '_')}.csv`;
+            const csvFile = new File([blob], fileName, { type: 'text/csv' });
 
             if (navigator.canShare && navigator.canShare({ files: [csvFile] })) {
                 try {
                     await navigator.share({
-                        title: 'Psychometrics Test Answers',
-                        text: 'My answers from the Israeli Psychometrics Test. Generated by the web application.',
+                        title: `Psychometrics Test Answers for ${userNameInput.value.trim()}`, // Include name in title
+                        text: `Here are the psychometrics test answers for ${userNameInput.value.trim()}. Generated by the web application.`,
                         files: [csvFile]
                     });
                     shareStatus.textContent = 'Answers shared successfully!';
+                    shareStatus.style.color = '#4a5568'; // Default text color
                 } catch (error) {
                     shareStatus.textContent = `Sharing cancelled or failed: ${error.message}`;
+                    shareStatus.style.color = '#dc2626'; // Red color for error
                     console.error('Error sharing CSV:', error);
                 }
             } else {
                 shareStatus.textContent = 'Mobile sharing not supported for files on this device/browser. Downloading instead.';
+                shareStatus.style.color = '#dc2626'; // Red color for warning/fallback
                 console.warn('Web Share API not supported or cannot share files. Falling back to download.');
                 
                 // Fallback to direct download if share API isn't available
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
-                a.download = 'psychometric_answers_fallback.csv'; // Use a different name for fallback download
+                a.download = `psychometric_answers_fallback_${userNameInput.value.trim().replace(/[^a-z0-9_.-]/gi, '_')}.csv`; // Dynamic fallback filename
                 document.body.appendChild(a);
                 a.click();
                 document.body.removeChild(a);
