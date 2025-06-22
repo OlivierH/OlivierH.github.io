@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Israeli Psychometrics Test</title>
-    <!-- Using Tailwind CSS for styling -->
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -69,12 +68,15 @@
         }
         .button-container {
             padding: 2rem 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem; /* Space between buttons */
+            max-width: 300px; /* Limit width of buttons container */
+            margin: 0 auto; /* Center buttons container */
         }
         .action-button {
             display: block;
             width: 100%;
-            max-width: 200px; /* Max width for the button */
-            margin: 0 auto;
             padding: 0.75rem 1.5rem;
             background-color: #16a34a; /* A nice green for download */
             color: white;
@@ -87,6 +89,12 @@
         .action-button:hover {
             background-color: #15803d;
         }
+        #share-status {
+            text-align: center;
+            margin-top: 1rem;
+            font-size: 0.9rem;
+            color: #4a5568;
+        }
     </style>
 </head>
 <body class="bg-gray-50">
@@ -96,12 +104,12 @@
 
         <form id="test-form">
             <div class="section-container bg-white shadow-sm rounded-lg overflow-hidden">
-                <!-- Sections will be generated here by JavaScript -->
-            </div>
+                </div>
 
             <div class="button-container">
-                 <!-- Changed button to trigger download -->
-                 <button type="button" id="download-btn" class="action-button">Download Answers (CSV)</button>
+                <button type="button" id="download-btn" class="action-button">Download Answers (CSV)</button>
+                <button type="button" id="share-btn" class="action-button bg-blue-600 hover:bg-blue-700">Share Answers (Mobile)</button>
+                <p id="share-status"></p>
             </div>
         </form>
     </div>
@@ -111,6 +119,9 @@
         const formContainer = document.querySelector('.section-container');
         const testForm = document.getElementById('test-form');
         const downloadBtn = document.getElementById('download-btn');
+        const shareBtn = document.getElementById('share-btn'); // New share button
+        const shareStatus = document.getElementById('share-status'); // New status element
+
         const numSections = 8;
         const numQuestionsPerSection = 25;
 
@@ -165,8 +176,8 @@
             formContainer.appendChild(sectionDiv);
         }
 
-        // --- New Download Logic ---
-        downloadBtn.addEventListener('click', function() {
+        // --- Function to generate CSV content ---
+        function generateCsvContent() {
             const formData = new FormData(testForm);
             let csvContent = "section,question,answer\n"; // CSV Header
 
@@ -177,13 +188,18 @@
                 const sectionNum = parts[0];
                 const questionNum = parts[1];
                 
-                csvContent += `${sectionNum},${questionNum},${value}\n`;
+                // Basic CSV escaping for values (if needed, though '1','2','3','4' are simple)
+                const escapedValue = String(value).replace(/"/g, '""'); // Escape double quotes
+                csvContent += `${sectionNum},${questionNum},"${escapedValue}"\n`;
             }
+            return csvContent;
+        }
 
-            // Create a Blob from the CSV string
+        // --- Download Logic (reusing generateCsvContent) ---
+        downloadBtn.addEventListener('click', function() {
+            const csvContent = generateCsvContent();
             const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
             
-            // Create a link to trigger the download
             const link = document.createElement("a");
             const url = URL.createObjectURL(blob);
             link.setAttribute("href", url);
@@ -192,6 +208,44 @@
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
+            URL.revokeObjectURL(url); // Clean up the URL
+            shareStatus.textContent = 'Answers downloaded as psychometric_answers.csv';
+        });
+
+        // --- Share Logic (new) ---
+        shareBtn.addEventListener('click', async () => {
+            shareStatus.textContent = 'Preparing to share...';
+
+            const csvContent = generateCsvContent();
+            const blob = new Blob([csvContent], { type: 'text/csv' }); // type: 'text/csv' is sufficient for share API
+            const csvFile = new File([blob], 'psychometric_answers.csv', { type: 'text/csv' });
+
+            if (navigator.canShare && navigator.canShare({ files: [csvFile] })) {
+                try {
+                    await navigator.share({
+                        title: 'Psychometrics Test Answers',
+                        text: 'My answers from the Israeli Psychometrics Test. Generated by the web application.',
+                        files: [csvFile]
+                    });
+                    shareStatus.textContent = 'Answers shared successfully!';
+                } catch (error) {
+                    shareStatus.textContent = `Sharing cancelled or failed: ${error.message}`;
+                    console.error('Error sharing CSV:', error);
+                }
+            } else {
+                shareStatus.textContent = 'Mobile sharing not supported for files on this device/browser. Downloading instead.';
+                console.warn('Web Share API not supported or cannot share files. Falling back to download.');
+                
+                // Fallback to direct download if share API isn't available
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'psychometric_answers_fallback.csv'; // Use a different name for fallback download
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url); // Clean up the URL
+            }
         });
 
     </script>
